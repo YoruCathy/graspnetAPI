@@ -6,6 +6,7 @@ from transforms3d.euler import euler2mat, quat2mat
 from utils import generate_scene_model, generate_scene_pointcloud, generate_views, get_model_grasps, plot_gripper_pro_max, transform_points
 from rotation import viewpoint_params_to_matrix, batch_viewpoint_params_to_matrix
 
+
 def create_table_cloud(width, height, depth, dx=0, dy=0, dz=0, grid_size=0.01):
     xmap = np.linspace(0, width, int(width/grid_size))
     ymap = np.linspace(0, depth, int(depth/grid_size))
@@ -22,26 +23,33 @@ def create_table_cloud(width, height, depth, dx=0, dy=0, dz=0, grid_size=0.01):
 
 
 def visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=10, th=0.3, align_to_table=True, max_width=0.08, save_folder='save_fig', show=False):
-    model_list, obj_list, pose_list = generate_scene_model(dataset_root, scene_name, anno_idx, return_poses=True, align=align_to_table, camera=camera)
-    point_cloud = generate_scene_pointcloud(dataset_root, scene_name, anno_idx, align=align_to_table, camera=camera)
+    model_list, obj_list, pose_list = generate_scene_model(
+        dataset_root, scene_name, anno_idx, return_poses=True, align=align_to_table, camera=camera)
+    point_cloud = generate_scene_pointcloud(
+        dataset_root, scene_name, anno_idx, align=align_to_table, camera=camera)
 
-    table = create_table_cloud(1.0, 0.02, 1.0, dx=-0.5, dy=-0.5, dz=0, grid_size=0.01)
+    table = create_table_cloud(
+        1.0, 0.02, 1.0, dx=-0.5, dy=-0.5, dz=0, grid_size=0.01)
     num_views, num_angles, num_depths = 300, 12, 4
     views = generate_views(num_views)
-    collision_label = np.load('{}/collision_label/{}/collision_labels.npz'.format(dataset_root,scene_name))
+    collision_label = np.load(
+        '{}/collision_label/{}/collision_labels.npz'.format(dataset_root, scene_name))
 
     vis = o3d.visualization.Visualizer()
-    vis.create_window(width = 1280, height = 720)
+    vis.create_window(width=1280, height=720)
     ctr = vis.get_view_control()
-    param = o3d.io.read_pinhole_camera_parameters('param_{}.json'.format(camera))
+    param = o3d.io.read_pinhole_camera_parameters(
+        'param_{}.json'.format(camera))
 
     if align_to_table:
-        cam_pos = np.load(os.path.join(dataset_root, 'scenes', scene_name, camera, 'cam0_wrt_table.npy'))
+        cam_pos = np.load(os.path.join(dataset_root, 'scenes',
+                                       scene_name, camera, 'cam0_wrt_table.npy'))
         param.extrinsic = np.linalg.inv(cam_pos).tolist()
 
     grippers = []
     for i, (obj_idx, trans) in enumerate(zip(obj_list, pose_list)):
-        sampled_points, offsets, scores, _ = get_model_grasps('%s/grasp_label/%03d_labels.npz'%(dataset_root, obj_idx))
+        sampled_points, offsets, scores, _ = get_model_grasps(
+            '%s/grasp_label/%03d_labels.npz' % (dataset_root, obj_idx))
         collision = collision_label['arr_{}'.format(i)]
 
         cnt = 0
@@ -56,16 +64,19 @@ def visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=10, th=0.3, al
             np.random.shuffle(view_inds)
             flag = False
             for v in view_inds:
-                if flag: break
+                if flag:
+                    break
                 view = views[v]
                 angle_inds = np.arange(12)
                 np.random.shuffle(angle_inds)
                 for a in angle_inds:
-                    if flag: break
+                    if flag:
+                        break
                     depth_inds = np.arange(4)
                     np.random.shuffle(depth_inds)
                     for d in depth_inds:
-                        if flag: break
+                        if flag:
+                            break
                         angle, depth, width = offset[v, a, d]
                         if score[v, a, d] > th or score[v, a, d] < 0:
                             continue
@@ -74,9 +85,11 @@ def visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=10, th=0.3, al
                         if collision[point_ind, v, a, d]:
                             continue
                         R = viewpoint_params_to_matrix(-view, angle)
-                        t = transform_points(target_point[np.newaxis,:], trans).squeeze()
-                        R = np.dot(trans[:3,:3], R)
-                        gripper = plot_gripper_pro_max(t, R, width, depth, 1.1-score[v, a, d])
+                        t = transform_points(
+                            target_point[np.newaxis, :], trans).squeeze()
+                        R = np.dot(trans[:3, :3], R)
+                        gripper = plot_gripper_pro_max(
+                            t, R, width, depth, 1.1-score[v, a, d])
                         grippers.append(gripper)
                         flag = True
             if flag:
@@ -89,13 +102,13 @@ def visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=10, th=0.3, al
         vis.add_geometry(gripper)
     ctr.convert_from_pinhole_camera_parameters(param)
     vis.poll_events()
-    filename = os.path.join(save_folder, '{}_{}_pointcloud.png'.format(scene_name, camera))
+    filename = os.path.join(
+        save_folder, '{}_{}_pointcloud.png'.format(scene_name, camera))
     if not os.path.exists(save_folder):
         os.mkdir(save_folder)
     vis.capture_screen_image(filename, do_render=True)
     if show:
         o3d.visualization.draw_geometries([point_cloud, *grippers])
-
 
     vis.remove_geometry(point_cloud)
     vis.add_geometry(table)
@@ -103,54 +116,72 @@ def visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=10, th=0.3, al
         vis.add_geometry(model)
     ctr.convert_from_pinhole_camera_parameters(param)
     vis.poll_events()
-    filename = os.path.join(save_folder, '{}_{}_model.png'.format(scene_name, camera))
+    filename = os.path.join(
+        save_folder, '{}_{}_model.png'.format(scene_name, camera))
     vis.capture_screen_image(filename, do_render=True)
     if show:
         o3d.visualization.draw_geometries([table, *model_list, *grippers])
 
 
-def vis6D(dataset_root, scene_name, anno_idx, camera, align_to_table=True, save_folder='save_fig', show=False):
-    model_list, obj_list, pose_list = generate_scene_model(dataset_root, scene_name, anno_idx, return_poses=True, align=align_to_table, camera=camera)
-    point_cloud = generate_scene_pointcloud(dataset_root, scene_name, anno_idx, align=align_to_table, camera=camera)
-    point_cloud = point_cloud.voxel_down_sample(voxel_size=0.005)
+def vis6D(dataset_root, scene_name, anno_idx, camera, align_to_table=True, save_folder='save_fig', show=False, on_pic=False):
+    model_list, obj_list, pose_list = generate_scene_model(
+        dataset_root, scene_name, anno_idx, return_poses=True, align=align_to_table, camera=camera)
+    if not on_pic:
+        point_cloud = generate_scene_pointcloud(
+            dataset_root, scene_name, anno_idx, align=align_to_table, camera=camera)
+        point_cloud = point_cloud.voxel_down_sample(voxel_size=0.005)
 
     vis = o3d.visualization.Visualizer()
-    vis.create_window(width = 1280, height = 720)
+    vis.create_window(width=1280, height=720)
     ctr = vis.get_view_control()
-    param = o3d.io.read_pinhole_camera_parameters('param_{}.json'.format(camera))
+    param = o3d.io.read_pinhole_camera_parameters(
+        'param_{}.json'.format(camera))
 
     if align_to_table:
-        cam_pos = np.load(os.path.join(dataset_root, 'scenes', scene_name, camera, 'cam0_wrt_table.npy'))
+        cam_pos = np.load(os.path.join(dataset_root, 'scenes',
+                                       scene_name, camera, 'cam0_wrt_table.npy'))
         param.extrinsic = np.linalg.inv(cam_pos).tolist()
 
-    vis.add_geometry(point_cloud)
+    if not on_pic:
+        vis.add_geometry(point_cloud)
+    else:
+        img = o3d.io.read_image(os.path.join(
+            dataset_root, 'scenes', scene_name, camera, 'rgb', '%04d.png' % anno_idx))
+        vis.add_geometry(img)
     for model in model_list:
         vis.add_geometry(model)
     ctr.convert_from_pinhole_camera_parameters(param)
     vis.poll_events()
-    filename = os.path.join(save_folder, '{}_{}_6d.png'.format(scene_name, camera))
+    os.makedirs(save_folder, exist_ok=True)
+    filename = os.path.join(
+        save_folder, '{}_{}_6d.png'.format(scene_name, camera))
     vis.capture_screen_image(filename, do_render=True)
-    if show:
+    if show and not on_pic:
         o3d.visualization.draw_geometries([point_cloud, *model_list])
-
+    elif show and on_pic:
+        o3d.visualization.draw_geometries([*model_list, img])
 
 
 def visObjGrasp(dataset_root, obj_idx, num_grasp=10, th=0.5, save_folder='save_fig', show=False):
-    plyfile = os.path.join(dataset_root, 'models', '%03d'%obj_idx, 'nontextured.ply')
+    plyfile = os.path.join(dataset_root, 'models', '%03d' %
+                           obj_idx, 'nontextured.ply')
     model = o3d.io.read_point_cloud(plyfile)
 
     num_views, num_angles, num_depths = 300, 12, 4
     views = generate_views(num_views)
 
     vis = o3d.visualization.Visualizer()
-    vis.create_window(width = 1280, height = 720)
+    vis.create_window(width=1280, height=720)
     ctr = vis.get_view_control()
-    param = o3d.io.read_pinhole_camera_parameters('param_{}.json'.format('kinect'))
+    param = o3d.io.read_pinhole_camera_parameters(
+        'param_{}.json'.format('kinect'))
 
-    cam_pos = np.load(os.path.join(dataset_root, 'scenes', 'scene_0000', 'kinect', 'cam0_wrt_table.npy'))
+    cam_pos = np.load(os.path.join(dataset_root, 'scenes',
+                                   'scene_0000', 'kinect', 'cam0_wrt_table.npy'))
     param.extrinsic = np.linalg.inv(cam_pos).tolist()
 
-    sampled_points, offsets, scores, _ = get_model_grasps('%s/grasp_label/%03d_labels.npz'%(dataset_root, obj_idx))
+    sampled_points, offsets, scores, _ = get_model_grasps(
+        '%s/grasp_label/%03d_labels.npz' % (dataset_root, obj_idx))
 
     cnt = 0
     point_inds = np.arange(sampled_points.shape[0])
@@ -165,22 +196,26 @@ def visObjGrasp(dataset_root, obj_idx, num_grasp=10, th=0.5, save_folder='save_f
         np.random.shuffle(view_inds)
         flag = False
         for v in view_inds:
-            if flag: break
+            if flag:
+                break
             view = views[v]
             angle_inds = np.arange(12)
             np.random.shuffle(angle_inds)
             for a in angle_inds:
-                if flag: break
+                if flag:
+                    break
                 depth_inds = np.arange(4)
                 np.random.shuffle(depth_inds)
                 for d in depth_inds:
-                    if flag: break
+                    if flag:
+                        break
                     angle, depth, width = offset[v, a, d]
                     if score[v, a, d] > th or score[v, a, d] < 0:
                         continue
                     R = viewpoint_params_to_matrix(-view, angle)
                     t = target_point
-                    gripper = plot_gripper_pro_max(t, R, width, depth, 1.1-score[v, a, d])
+                    gripper = plot_gripper_pro_max(
+                        t, R, width, depth, 1.1-score[v, a, d])
                     grippers.append(gripper)
                     flag = True
         if flag:
@@ -198,12 +233,16 @@ def visObjGrasp(dataset_root, obj_idx, num_grasp=10, th=0.5, save_folder='save_f
     if show:
         o3d.visualization.draw_geometries([model, *grippers])
 
+
 if __name__ == '__main__':
     camera = 'kinect'
-    dataset_root = '../'
-    scene_name = 'scene_0000'
+    dataset_root = '.graspnet'
+    scene_name = 'scene_0100'
     anno_idx = 0
     obj_idx = 0
-    visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=1, th=0.5, align_to_table=True, max_width=0.08, save_folder='save_fig', show=False)
-    vis6D(dataset_root, scene_name, anno_idx, camera, align_to_table=True, save_folder='save_fig', show=False)
-    visObjGrasp(dataset_root, obj_idx, num_grasp=10, th=0.5, save_folder='save_fig', show=False)
+    visAnno(dataset_root, scene_name, anno_idx, camera, num_grasp=1, th=0.5,
+            align_to_table=True, max_width=0.08, save_folder='./graspnet', show=False)
+    vis6D(dataset_root, scene_name, anno_idx, camera,
+          align_to_table=True, save_folder='./graspnet', show=True, on_pic=True)
+    visObjGrasp(dataset_root, obj_idx, num_grasp=10,
+                th=0.5, save_folder='save_fig', show=False)
